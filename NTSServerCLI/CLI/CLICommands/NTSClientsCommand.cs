@@ -333,7 +333,7 @@ namespace cloud.charging.open.NTSServer.CommandLine
 
             if (Activity.LastRefused is NTSKEOverSSHExchange refused)
                 yield return $"    last refused  {refused.Timestamp:yyyy-MM-dd HH:mm:ss} UTC from {refused.Session.Peer?.ToString() ?? "a tunnel"}: " +
-                             $"{refused.Problem}; {Activity.Refused} time(s) since the start";
+                             $"{NTSClientActivity.WhyOf(refused).TrimEnd('.')}; {Activity.Refused} time(s) since the start";
 
         }
 

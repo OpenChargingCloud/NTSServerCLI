@@ -338,9 +338,9 @@ The prompt is the console's, and every account's over SSH:
 
 | | |
 |---|---|
-| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines; and how much it answered |
+| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines, with how many key exchanges it served and turned away since the start; the master keys of the cookies - their ids, from when and until when each is kept, which one seals now, never their values - with **New master key** and **New key, and forget the others**; and how much it answered |
 | **Settings** (`/ntsServer/settings`) | where the time comes from - this machine's clock and what the answers say of it, or an NTS group and how it is followed - what is listened on, and the names it goes by; saved whole, changed where it differs, and in effect at once, with what has to be known of it said below: a port the clients are to be told, a certificate made anew, a switch of the start that says otherwise |
-| **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
+| **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options, the key of an SSH CA marked as one, with the names its certificates have to be made out to; beside each client when it was last served - from where, with option A or B of the white paper, the AEAD algorithm, how many cookies - and when it was last turned away and why, since the start; the accounts of the node that made key exchanges under their own names, so too; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
 | **Configuration** | what the NTS server is running and its `ntsServer` section as it is in effect, and below it the **DNS client**, the **Upstream time servers** (the node's NTS groups), the **SSH server**, the **Trusted certificates**, **Identities** and **Server identities** of the node itself - the TLS identity NTS-KE shows among them |
 | **Logs** | the log as it happens |
 
@@ -349,7 +349,10 @@ written into the `ntsServer` section of the configuration file: a client
 switched off or removed makes no key exchange from then on, and a session of
 it that is open ends. Whoever may only read sees everything and changes
 nothing; **Ask them now** takes a role that may run `nts`, a change of the
-settings or of the NTS clients one that may edit `timeserver`.
+settings or of the NTS clients or a new master key one that may edit
+`timeserver`. A new master key that forgets the others is asked about first:
+every client makes a new key exchange after it. The key exchanges are counted
+since the program started; what lasts is in the log.
 
 `--frontend libs/NTSServer/NTSServer/Frontend/dist` serves the web interface
 from the directory instead of the assembly, for `npm run watch` there.
@@ -365,8 +368,9 @@ Every node's below `/api/v1`, and the time server's:
 | `GET /api/v1/ntsServer/settings` | the `ntsServer` section as it is in effect |
 | `PUT /api/v1/ntsServer/settings` | the section or any part of it but `ssh` - a `null` is the default - in effect at once and saved where it changed; answered `{ "settings", "changed": [ "ntpPort", "upstream.group", ... ], "notes" }`, 400 for what is no setting, 409 for a port somebody else has, with nothing changed |
 | `POST /api/v1/ntsServer/sync` | ask the upstream servers now |
-| `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint |
+| `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint, each client - and each account that made key exchanges - with its last key exchange |
 | `PUT /api/v1/ntsServer/ssh` | `{ "enabled", "clients": [ { "name", "keys": [ <authorized_keys line> ], "enabled" } ] }` - what it changes, and nothing else; answered as `GET` |
+| `POST /api/v1/ntsServer/masterKeys/rotate` | `{ "forget" }` - seal the cookies with a new master key from now on, and with `"forget": true` forget every earlier one at once; answered with the new key and the keys kept, never a value |
 
 
 ### Who may do what
