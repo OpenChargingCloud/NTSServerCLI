@@ -127,6 +127,29 @@ quietly hands out the local clock while somebody believes it follows the PTB.
 * `rateLimit` answers a client that asks too often with a RATE kiss-o'-death
   (RFC 8633 § 5.4), at Norn's defaults.
 
+Everything but `ssh` can also be changed while the server runs - on the
+**Settings** page of the web interface, or with `PUT /api/v1/ntsServer/settings`
+- and is in effect at once:
+
+* other ports, another address, another NTP server named or rate limiting
+  switched are answered by a server made anew; a port somebody else has
+  refuses the change, with nothing changed and the server that answered still
+  answering;
+* another `hostname` makes the self-signed identity anew, which a client that
+  holds the server to its fingerprint has to be told;
+* `timeSource` switched to `upstream` stops answering until the group has
+  given a time; switched back to `local`, the time handed out is the
+  machine's clock again at once, by as much of a jump as the two were apart;
+* `local` is answered at once in local mode, and `upstream` followed from the
+  next round in upstream mode - which is asked at once, not at the end of the
+  poll interval before.
+
+Only what changed is written into the section, and a value taken away is
+taken out of it, so that it reads as the default. What a switch of this start
+sets - `--ntp-port`, `--upstream`, ... - is never written back: changed here
+anyway, it is in effect and saved, and the answer says that the switch wins
+again at a start with it.
+
 
 ### Where the time comes from
 
@@ -316,16 +339,17 @@ The prompt is the console's, and every account's over SSH:
 | | |
 |---|---|
 | **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines; and how much it answered |
+| **Settings** (`/ntsServer/settings`) | where the time comes from - this machine's clock and what the answers say of it, or an NTS group and how it is followed - what is listened on, and the names it goes by; saved whole, changed where it differs, and in effect at once, with what has to be known of it said below: a port the clients are to be told, a certificate made anew, a switch of the start that says otherwise |
 | **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
 | **Configuration** | what the NTS server is running and its `ntsServer` section as it is in effect, and below it the **DNS client**, the **Upstream time servers** (the node's NTS groups), the **SSH server**, the **Trusted certificates**, **Identities** and **Server identities** of the node itself - the TLS identity NTS-KE shows among them |
 | **Logs** | the log as it happens |
 
-Every change on the NTS clients page is in effect at once and written into
-the `ntsServer` section of the configuration file: a client switched off or
-removed makes no key exchange from then on, and a session of it that is open
-ends. Whoever may only read sees everything and changes nothing; **Ask them
-now** takes a role that may run `nts`, a change of the NTS clients one that
-may edit `timeserver`.
+Every change on the Settings and the NTS clients page is in effect at once and
+written into the `ntsServer` section of the configuration file: a client
+switched off or removed makes no key exchange from then on, and a session of
+it that is open ends. Whoever may only read sees everything and changes
+nothing; **Ask them now** takes a role that may run `nts`, a change of the
+settings or of the NTS clients one that may edit `timeserver`.
 
 `--frontend libs/NTSServer/NTSServer/Frontend/dist` serves the web interface
 from the directory instead of the assembly, for `npm run watch` there.
@@ -339,6 +363,7 @@ Every node's below `/api/v1`, and the time server's:
 |---|---|
 | `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it, the master keys kept and each NTS client's last key exchange |
 | `GET /api/v1/ntsServer/settings` | the `ntsServer` section as it is in effect |
+| `PUT /api/v1/ntsServer/settings` | the section or any part of it but `ssh` - a `null` is the default - in effect at once and saved where it changed; answered `{ "settings", "changed": [ "ntpPort", "upstream.group", ... ], "notes" }`, 400 for what is no setting, 409 for a port somebody else has, with nothing changed |
 | `POST /api/v1/ntsServer/sync` | ask the upstream servers now |
 | `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint |
 | `PUT /api/v1/ntsServer/ssh` | `{ "enabled", "clients": [ { "name", "keys": [ <authorized_keys line> ], "enabled" } ] }` - what it changes, and nothing else; answered as `GET` |
@@ -347,7 +372,7 @@ Every node's below `/api/v1`, and the time server's:
 ### Who may do what
 
 Two resources beside the node's: `timeserver` - read, how the time server
-stands; edited, its NTS clients, NTS-KE over SSH and its master keys - and `ntske` - run, a key
+stands; edited, its settings, its NTS clients, NTS-KE over SSH and its master keys - and `ntske` - run, a key
 exchange over SSH by an account. Two roles beside the node's viewer and
 administrators: `operator`, who reads everything and asks the name and time
 servers, and `ntsclient`, who makes key exchanges and nothing else.
@@ -382,7 +407,10 @@ The settings, the clock and how it is slewed, leap seconds - when one counts,
 and the instant it is made - NTS-KE over TLS and over SSH followed by
 NTP+NTS - asked by Norn's own client - cookies that outlive a restart, a
 second server following the first upstream, and passing on and making a
-leap second the first announces at the end of a month, and WWCP_Node's
+leap second the first announces at the end of a month, the settings changed
+while running - other ports answered on at once, a port somebody else has
+changing nothing, a switch of the start never written back, local mode to
+upstream and back, and who may change them - and WWCP_Node's
 conformance suite asked of an NTS server, its web interface among it. Nothing
 in them leaves the machine. The web interface's own tests - its pages drawn
 against a stand-in server, and the rules every page of every kind of node is
@@ -407,9 +435,6 @@ would cost.
 
 ### What is not here yet
 
-* The settings of the time server itself - its ports, its time source, the
-  upstream group - are changed in the configuration file, not in the web
-  interface, and take effect at the next start.
 * An upstream server that says it is not synchronized itself - leap indicator
   3 - still takes part in the median: Norn's verdict on a round leaves out
   what did not authenticate, but not that. It only counts against a leap
