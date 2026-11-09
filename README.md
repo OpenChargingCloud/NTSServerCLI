@@ -4,7 +4,8 @@
 [![Nightly](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/nightly.yml/badge.svg)](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/nightly.yml)
 
 One time server for a local network: NTS-KE over TLS 1.3 and over SSH, and
-NTP and NTP+NTS, with a JSON API and a prompt, until 'quit' or Ctrl+C.
+NTP and NTP+NTS, with a web interface, a JSON API and a prompt, until 'quit'
+or Ctrl+C.
 
 It hands out either the clock of the machine it runs on, or the time of a
 group of upstream NTS servers it follows - asked over NTS-KE (TLS 1.3) and
@@ -45,8 +46,9 @@ git submodule update --init --recursive
 
 ### Building and running it
 
-.NET 10, and nothing else: there is no web interface, so the build runs no
-npm.
+.NET 10 and Node 22 or newer. The build runs `npm ci` and `npm run build` for
+the web interface itself whenever its inputs changed, and embeds it into the
+assembly; `-p:SkipFrontendBuild=true` builds the rest alone.
 
 ```
 dotnet build NTSServerCLI.slnx
@@ -56,9 +58,10 @@ dotnet run --project NTSServerCLI
 or `./run.sh`, which takes the same switches. `--help` lists all of them.
 Without a configuration file it hands out this machine's clock on the
 standard ports - NTS-KE on TCP 4460, NTP on UDP 123, on every IPv4 address -
-and serves its JSON API and its command line over SSH on 127.0.0.1 only
-(2361 and 22361; `--any` for every address). At the first start it makes one
-account, `root`, and shows its password once, on the console.
+and serves its web interface, its JSON API and its command line over SSH on
+127.0.0.1 only: http://127.0.0.1:2361/ and port 22361 (`--any` for every
+address). At the first start it makes one account, `root`, and shows its
+password once, on the console.
 
 Two things stand in the way of the standard ports:
 
@@ -261,16 +264,37 @@ The prompt is the console's, and every account's over SSH:
 `ssh -p 22361 root@127.0.0.1`.
 
 
+### The web interface
+
+| | |
+|---|---|
+| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines; and how much it answered |
+| **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
+| **Configuration** | what the NTS server is running and its `ntsServer` section as it is in effect, and below it the **DNS client**, the **Upstream time servers** (the node's NTS groups), the **SSH server**, the **Trusted certificates**, **Identities** and **Server identities** of the node itself - the TLS identity NTS-KE shows among them |
+| **Logs** | the log as it happens |
+
+Every change on the NTS clients page is in effect at once and written into
+the `ntsServer` section of the configuration file: a client switched off or
+removed makes no key exchange from then on, and a session of it that is open
+ends. Whoever may only read sees everything and changes nothing; **Ask them
+now** takes a role that may run `nts`, a change of the NTS clients one that
+may edit `timeserver`.
+
+`--frontend libs/NTSServer/NTSServer/Frontend/dist` serves the web interface
+from the directory instead of the assembly, for `npm run watch` there.
+
+
 ### The JSON API
 
 Every node's below `/api/v1`, and the time server's:
 
 | | |
 |---|---|
-| `GET /api/v1/ntsServer` | how the time server stands |
+| `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it |
 | `GET /api/v1/ntsServer/settings` | the `ntsServer` section as it is in effect |
 | `POST /api/v1/ntsServer/sync` | ask the upstream servers now |
-| `PUT /api/v1/ntsServer/ssh` | `{ "enabled", "clients": [ ... ] }` |
+| `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint |
+| `PUT /api/v1/ntsServer/ssh` | `{ "enabled", "clients": [ { "name", "keys": [ <authorized_keys line> ], "enabled" } ] }` - what it changes, and nothing else; answered as `GET` |
 
 
 ### Who may do what
@@ -289,6 +313,7 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | `NTSServerCLI/` | the command line: the time server's own switches, and its lines of what the console says at a start |
 | `NTSServerCLI/CLI/` | what can be typed at the running server - `timeServer` and `ntsClients` |
 | `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API - and its tests |
+| `libs/NTSServer/NTSServer/Frontend/` | the web interface: TypeScript and SCSS, bundled by webpack |
 | `libs/WWCP_Node/` | what every one of these programs shares: the configuration file, the log, name resolution and the time, the certificate store, who may sign in, the command line over SSH, and the switches, the usage and the banner every node has |
 | `libs/Norn/` | NTS and NTP: the key exchange over TLS and over SSH, the cookies, the AEAD, the server and the client |
 | `libs/Hermod/` | the network below all of them: HTTP, TLS, SSH and DNS |
@@ -309,12 +334,22 @@ dotnet test libs/NTSServer/NTSServerTests/NTSServerTests.csproj
 The settings, the clock and how it is slewed, NTS-KE over TLS and over SSH
 followed by NTP+NTS - asked by Norn's own client - cookies that outlive a
 restart, a second server following the first upstream, and WWCP_Node's
-conformance suite asked of an NTS server. Nothing in them leaves the machine.
+conformance suite asked of an NTS server, its web interface among it. Nothing
+in them leaves the machine. The web interface's own tests - its pages drawn
+against a stand-in server, and the rules every page of every kind of node is
+held to - are run by node, in `libs/NTSServer/NTSServer/Frontend`:
+
+```
+npm run typecheck
+npm run typecheck:test
+npm test
+```
 
 **CI** runs them on every push, beside the node's own tests, on Windows and on
-Debian 13; on Debian it then starts the server and asks it: the JSON API must
-be shut to anybody not signed in, SSH must answer, NTS-KE must agree to TLS
-1.3 with the ALPN `ntske/1`, and NTP must answer at stratum 1. **Nightly** runs
+Debian 13; on Debian it then starts the server and asks it: `/` must be the
+embedded web interface, the JSON API must be shut to anybody not signed in,
+SSH must answer, NTS-KE must agree to TLS 1.3 with the ALPN `ntske/1`, and NTP
+must answer at stratum 1. **Nightly** runs
 every test of every library at the commits pinned here - but for those that
 ask real name and time servers on the Internet - and builds and tests once
 more with every library at its newest commit, to say what advancing them
@@ -323,9 +358,10 @@ would cost.
 
 ### What is not here yet
 
-* A web interface of its own: the JSON API, the prompt and the configuration
-  file are what there is. `--frontend` serves a directory, should one be built.
 * The leap indicator of the upstream servers is not passed on.
+* The settings of the time server itself - its ports, its time source, the
+  upstream group - are changed in the configuration file, not in the web
+  interface, and take effect at the next start.
 
 
 ## Your participation
