@@ -155,6 +155,16 @@ namespace cloud.charging.open.NTSServer.CommandLine
 
             yield return $"                {Status.Polls} round(s), {Status.FailedPolls} without a time, {Status.Outliers} outlier(s), {Status.Steps} step(s)";
 
+            if (Status.ScheduledLeap is LeapSecond leap)
+                yield return $"                {leap} - announced to the clients, and made at midnight";
+
+            else if (Status.AnnouncedLeapIndicator is 1 or 2)
+                yield return $"                a leap second announced by the upstream servers, taken up only on the last day of a month";
+
+            if (Status.LeapSeconds != TimeSpan.Zero)
+                yield return String.Create(CultureInfo.InvariantCulture,
+                                 $"                leap seconds made since the start: {Status.LeapSeconds.TotalSeconds:+0;-0} s");
+
             if (Status.LastProblem is not null)
                 yield return $"                last problem: {Status.LastProblem}";
 

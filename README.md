@@ -179,6 +179,28 @@ The answers say stratum one below the upstream server closest to the median,
 name it by its address as the reference (RFC 5905 § 7.3), and add its root
 delay and dispersion to what the way there and the measuring add.
 
+**Leap seconds** the upstream servers announce are passed on and made:
+
+* a round announces one when more than half of its authenticated answers say
+  so with their leap indicator (1 inserted, 2 deleted) - a single server
+  cannot have one made, and a server that is not synchronized itself (3)
+  counts against it;
+* it is taken up only on the last day of a month, at whose end it is made: a
+  client that hands the leap indicator to its kernel (adjtimex's `STA_INS`)
+  has the second made at the end of the day it was told, whatever day that is;
+* from then on the answers announce it, and at midnight - as the time handed
+  out reads it - the clock repeats 23:59:59, or skips it for a deleted second,
+  whether the upstream servers can be reached then or not; it is announced no
+  longer from that instant on;
+* a group that withdraws it before midnight has it not made. Where the
+  upstream servers made a second that was not announced here, or did not make
+  one that was, the clock is found a second off and stepped after three
+  rounds, as it would be for any other reason.
+
+The offsets are measured leap seconds aside, so that a leap second does not
+end up in the rate of the oscillator. In local mode, leap seconds are the
+business of whatever keeps the machine's clock.
+
 The node's own check of the clock against its legal group - every 15 minutes,
 in the log and in the metrological log - measures the time handed out, not
 the machine's clock below it.
@@ -293,7 +315,7 @@ The prompt is the console's, and every account's over SSH:
 
 | | |
 |---|---|
-| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines; and how much it answered |
+| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines; and how much it answered |
 | **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
 | **Configuration** | what the NTS server is running and its `ntsServer` section as it is in effect, and below it the **DNS client**, the **Upstream time servers** (the node's NTS groups), the **SSH server**, the **Trusted certificates**, **Identities** and **Server identities** of the node itself - the TLS identity NTS-KE shows among them |
 | **Logs** | the log as it happens |
@@ -356,9 +378,11 @@ it is started with and the commands it can be typed at. What a time server
 dotnet test libs/NTSServer/NTSServerTests/NTSServerTests.csproj
 ```
 
-The settings, the clock and how it is slewed, NTS-KE over TLS and over SSH
-followed by NTP+NTS - asked by Norn's own client - cookies that outlive a
-restart, a second server following the first upstream, and WWCP_Node's
+The settings, the clock and how it is slewed, leap seconds - when one counts,
+and the instant it is made - NTS-KE over TLS and over SSH followed by
+NTP+NTS - asked by Norn's own client - cookies that outlive a restart, a
+second server following the first upstream, and passing on and making a
+leap second the first announces at the end of a month, and WWCP_Node's
 conformance suite asked of an NTS server, its web interface among it. Nothing
 in them leaves the machine. The web interface's own tests - its pages drawn
 against a stand-in server, and the rules every page of every kind of node is
@@ -383,10 +407,13 @@ would cost.
 
 ### What is not here yet
 
-* The leap indicator of the upstream servers is not passed on.
 * The settings of the time server itself - its ports, its time source, the
   upstream group - are changed in the configuration file, not in the web
   interface, and take effect at the next start.
+* An upstream server that says it is not synchronized itself - leap indicator
+  3 - still takes part in the median: Norn's verdict on a round leaves out
+  what did not authenticate, but not that. It only counts against a leap
+  second here.
 
 
 ## Your participation
