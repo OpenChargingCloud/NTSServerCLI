@@ -25,6 +25,8 @@ using org.GraphDefined.Vanaheimr.Norn.NTS;
 
 using cloud.charging.open.protocols.WWCP.Node.Web;
 
+using cloud.charging.open.NTSServer.SecureShell;
+
 #endregion
 
 namespace cloud.charging.open.NTSServer.CommandLine
@@ -36,8 +38,9 @@ namespace cloud.charging.open.NTSServer.CommandLine
     /// </summary>
     /// <remarks>
     /// <code>
-    /// ntsClients                                  every NTS client, with its keys
-    /// ntsClients add &lt;name&gt; &lt;authorized_keys line&gt;  let a client in with a key - a new client, or one more key
+    /// ntsClients                                  every NTS client, with its keys and its last key exchange
+    /// ntsClients add &lt;name&gt; &lt;authorized_keys line&gt;  let a client in with a key - a new client, or one more key;
+    ///                                             with cert-authority, with the user certificates of an SSH CA
     /// ntsClients remove &lt;name&gt; [&lt;fingerprint&gt;]     take a client out, or one of its keys
     /// ntsClients enable|disable &lt;name&gt;           switch a client on or off
     /// ntsClients ssh on|off                       serve NTS-KE over SSH, or not
@@ -177,9 +180,13 @@ namespace cloud.charging.open.NTSServer.CommandLine
 
                     }
 
+                    var with = AuthorizedKeysFile.TryParseLine(line, out var added) && added is not null && added.IsCertAuthority
+                                   ? $"the user certificates of the CA {FingerprintOf(line)}"
+                                   : FingerprintOf(line);
+
                     return Saved(clients, index < 0
-                                              ? $"The NTS client '{name}' may make key exchanges over SSH with {FingerprintOf(line)}."
-                                              : $"The NTS client '{name}' may sign in with {FingerprintOf(line)} as well.");
+                                              ? $"The NTS client '{name}' may make key exchanges over SSH with {with}."
+                                              : $"The NTS client '{name}' may sign in with {with} as well.");
 
                 }
 
@@ -269,6 +276,19 @@ namespace cloud.charging.open.NTSServer.CommandLine
                 foreach (var key in client.Keys)
                     lines.Add($"    {FingerprintOf(key)}");
 
+                lines.AddRange(ActivityLines(node.Host.SSHActivity.TryGetValue(client.Name, out var activity)
+                                                 ? activity
+                                                 : NTSClientActivity.None));
+
+            }
+
+            // Accounts allowed to run "ntske" are no NTS clients, but are served all the same.
+            foreach (var account in node.Host.SSHActivity.
+                                        Where  (activity => !node.SSHClients.Knows(activity.Key)).
+                                        OrderBy(activity => activity.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                lines.Add($"{account.Key} (an account of this {node.Kind.Name})");
+                lines.AddRange(ActivityLines(account.Value));
             }
 
             return [ .. lines ];
@@ -294,12 +314,40 @@ namespace cloud.charging.open.NTSServer.CommandLine
 
         #endregion
 
+        #region (private static) ActivityLines(Activity)
+
+        /// <summary>
+        /// When a login was last served and how, and when last turned away and
+        /// why - since this program started.
+        /// </summary>
+        private static IEnumerable<String> ActivityLines(NTSClientActivity Activity)
+        {
+
+            if (Activity.LastServed is NTSKEOverSSHExchange served)
+                yield return $"    last served   {served.Timestamp:yyyy-MM-dd HH:mm:ss} UTC from {served.Session.Peer?.ToString() ?? "a tunnel"}, " +
+                             $"{NTSClientActivity.TextOf(served.Method)}, {served.Cookies} cookie(s); " +
+                             $"{Activity.Served} key exchange(s), {Activity.Cookies} cookie(s) since the start";
+
+            else
+                yield return  "    no key exchange since the start";
+
+            if (Activity.LastRefused is NTSKEOverSSHExchange refused)
+                yield return $"    last refused  {refused.Timestamp:yyyy-MM-dd HH:mm:ss} UTC from {refused.Session.Peer?.ToString() ?? "a tunnel"}: " +
+                             $"{refused.Problem}; {Activity.Refused} time(s) since the start";
+
+        }
+
+        #endregion
+
         #region (private static) FingerprintOf(Line)
 
         private static String FingerprintOf(String Line)
 
             => AuthorizedKeysFile.TryParseLine(Line, out var key) && key is not null
-                   ? $"{key.PublicKey.Sha256Fingerprint} ({key.PublicKey.Algorithm})"
+                   ? $"{key.PublicKey.Sha256Fingerprint} ({key.PublicKey.Algorithm}" +
+                     (key.IsCertAuthority
+                          ? ", a CA" + (key.Principals.Count > 0 ? $" for {String.Join(", ", key.Principals)}" : "")
+                          : "") + ")"
                    : "an unreadable key";
 
         #endregion
@@ -309,7 +357,8 @@ namespace cloud.charging.open.NTSServer.CommandLine
         public override String Help()
 
             => $"{CommandName} [add <name> <authorized_keys line> | remove <name> [<fingerprint>] | enable|disable <name> | ssh on|off] - " +
-                "the machines that may make NTS key exchanges over SSH";
+                "the machines that may make NTS key exchanges over SSH, by their keys or by the certificates of an SSH CA (cert-authority), " +
+                "and when each was last served";
 
         #endregion
 

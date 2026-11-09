@@ -111,6 +111,7 @@ namespace cloud.charging.open.NTSServer.CommandLine
                 $"NTS-KE (SSH)    " + (node.NTSKEOverSSH
                                           ? $"{node.SSHURL}, subsystem {NTSKE_SSH.SubsystemName}, {node.SSHClients.Clients.Count} NTS client(s)"
                                           : settings.SSHEnabled ? "switched on, but the SSH server is off" : "switched off"),
+                $"                host key {node.SSHHostKey ?? "not known yet"}",
                 $"NTP             UDP {TimeServerSettings.TextOf(settings.Listen)}:{settings.NTPPort}" +
                                   (host.AdvertisedNTP is not null ? $", the key exchange names {host.AdvertisedNTP}" : ""),
                 $"clock           {node.Clock.GetUtcNow():yyyy-MM-dd HH:mm:ss.fff} UTC" +
@@ -118,6 +119,9 @@ namespace cloud.charging.open.NTSServer.CommandLine
                                        ? String.Create(CultureInfo.InvariantCulture, $", free-running base corrected by {node.Clock.Correction.TotalMilliseconds:+0.000;-0.000} ms at {node.Clock.Frequency * 1e6:+0.000;-0.000} ppm")
                                        : ", this machine's clock"),
                 $"described as    {host.Description?.ToString() ?? "nothing - nothing is answered"}",
+                $"master key      " + (host.CurrentMasterKeyId is UInt64 current
+                                           ? $"{current}, of {host.MasterKeys.Count} kept - see '{MasterKeysCommand.CommandName}'"
+                                           : "none - nothing is answered"),
                 $"answered        {metrics.NTPResponsesSent} NTP response(s) to {metrics.NTPRequestsReceived} request(s), " +
                                   $"{metrics.NTSKEResponsesSent} key exchange(s) of {metrics.NTSKEConnectionsAccepted} connection(s)" +
                                   (metrics.NTPRequestsInvalid > 0 || metrics.NTSKEHandshakeFailures > 0

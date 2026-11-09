@@ -218,6 +218,13 @@ the clock changes. Whoever reads them can open every cookie, and with it the
 keys its client authenticates time with - so the directory and the file are
 the owner's alone, and a key is gone from the file once it is forgotten.
 
+`masterKeys rotate` at the prompt seals the cookies with a new key from then
+on; the earlier keys still open their cookies until their seven days are over,
+so the clients move on with the cookies NTP hands them. `masterKeys rotate
+forget` is for a key that may have been read: every earlier key is forgotten
+at once, in the file as well, and every client makes a new key exchange.
+`masterKeys` shows the keys kept - their ids and validity, never their values.
+
 
 ### NTS-KE over SSH
 
@@ -232,14 +239,23 @@ login may use it:
   with one of its keys, and the node confines it to the key exchange - no
   terminal, no command line, no SFTP. Each key is an `authorized_keys` line, so
   that `from="192.168.1.0/24"` and `expiry-time="20271231"` in front of it hold
-  as OpenSSH holds them. At the prompt:
+  as OpenSSH holds them. A line with `cert-authority` is the key of an SSH CA:
+  the user certificates it signs let the client in where they name it - or,
+  with `principals="..."` on the line, one of the names there - and what such a
+  certificate confines a session to holds as well. At the prompt:
 
   ```
   ntsClients add cs001 ssh-ed25519 AAAA... cs001
+  ntsClients add cs002 cert-authority,principals="station-2" ssh-ed25519 AAAA... station CA
   ntsClients remove cs001 [<fingerprint>]
   ntsClients disable cs001
   ntsClients ssh off
   ```
+
+  `ntsClients` lists each client with its keys, when it was last served -
+  from where, with which option of the white paper and how many cookies - and
+  when it was last turned away and why; so for every account that made a key
+  exchange. The log says each key exchange as well.
 
 * **Accounts** of the node with a role that may run `ntske` - the
   administrators, and the role `ntsclient`, which may do nothing else.
@@ -255,10 +271,19 @@ the subsystem name speaks it as well.
 Beside every node's commands - `syncNTS` and `listNTSGroups` among them, which
 ask and show the upstream servers - the NTS server has:
 
-* `timeServer` - what it listens on, where its time comes from, how far that
-  was from the upstream servers, and how much it answered;
+* `timeServer` - what it listens on, the SSH host key a client holds it to,
+  where its time comes from, how far that was from the upstream servers, the
+  master key the cookies are sealed with, and how much it answered;
 * `timeServer sync` - ask the upstream servers now;
-* `ntsClients ...` - the machines that may make key exchanges over SSH.
+* `ntsClients ...` - the machines that may make key exchanges over SSH, and
+  when each was last served;
+* `masterKeys [rotate [forget]]` - the master keys of the cookies, and a new
+  one from now on.
+
+Who signs in for the prompt is an account of the node; an NTS client never
+gets it - the command line and NTS-KE share the SSH server, not the logins
+(section 8.2 of the white paper "NTS Key Establishment over SSH"). Every change
+is logged with whoever made it.
 
 The prompt is the console's, and every account's over SSH:
 `ssh -p 22361 root@127.0.0.1`.
@@ -290,7 +315,7 @@ Every node's below `/api/v1`, and the time server's:
 
 | | |
 |---|---|
-| `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it |
+| `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it, the master keys kept and each NTS client's last key exchange |
 | `GET /api/v1/ntsServer/settings` | the `ntsServer` section as it is in effect |
 | `POST /api/v1/ntsServer/sync` | ask the upstream servers now |
 | `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint |
@@ -300,7 +325,7 @@ Every node's below `/api/v1`, and the time server's:
 ### Who may do what
 
 Two resources beside the node's: `timeserver` - read, how the time server
-stands; edited, its NTS clients and NTS-KE over SSH - and `ntske` - run, a key
+stands; edited, its NTS clients, NTS-KE over SSH and its master keys - and `ntske` - run, a key
 exchange over SSH by an account. Two roles beside the node's viewer and
 administrators: `operator`, who reads everything and asks the name and time
 servers, and `ntsclient`, who makes key exchanges and nothing else.
@@ -311,7 +336,7 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | | |
 |---|---|
 | `NTSServerCLI/` | the command line: the time server's own switches, and its lines of what the console says at a start |
-| `NTSServerCLI/CLI/` | what can be typed at the running server - `timeServer` and `ntsClients` |
+| `NTSServerCLI/CLI/` | what can be typed at the running server - `timeServer`, `ntsClients` and `masterKeys` |
 | `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API - and its tests |
 | `libs/NTSServer/NTSServer/Frontend/` | the web interface: TypeScript and SCSS, bundled by webpack |
 | `libs/WWCP_Node/` | what every one of these programs shares: the configuration file, the log, name resolution and the time, the certificate store, who may sign in, the command line over SSH, and the switches, the usage and the banner every node has |
