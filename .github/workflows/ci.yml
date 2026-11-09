@@ -1,0 +1,263 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  # Manual runs from the Actions tab ("Run workflow").
+  workflow_dispatch:
+
+concurrency:
+  # Pull requests: one run per branch, newest wins. Pushes: one run per commit,
+  # and nothing cancels anything — a commit with no verdict is a hole nobody
+  # comes back to fill. Keying the group on the SHA rather than only turning
+  # cancel-in-progress off is what makes that hold for more than two pushes.
+  # The same arrangement as PKICLI and the other repositories of this stack.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # One leg per platform this NTS server is used on:
+  #
+  #  * Windows, because that is where it is developed.
+  #  * Debian 13, because that is what the family is deployed on. GitHub has
+  #    no Debian runner image, so this leg is an Ubuntu runner carrying a
+  #    debian:13 container.
+  #
+  # fail-fast is off on purpose: "red on exactly one platform" is the most
+  # valuable thing a two-leg matrix produces, so one leg must not cancel the
+  # other.
+  #
+  # Unlike EVCLI there is no job before this one: nothing here touches
+  # ISO 15118, so there are no schemas to fetch. And unlike PKICLI there is no
+  # Node: the NTS server has no web interface of its own, so nothing in the
+  # build runs npm.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            leg: windows-latest
+          - os: ubuntu-latest
+            container: debian:13
+            leg: debian-13-container
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+
+      # Before the checkout, not after it: under the classic 260-character
+      # limit a submodule checkout gives up halfway through with "Filename too
+      # long" — the same thing the README warns about for a clone by hand.
+      - name: Allow long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
+      # Also before the checkout, and for a sharper reason: git itself. The bare
+      # debian:13 image has none, and actions/checkout without git falls back to
+      # downloading a tarball over the REST API — which cannot bring submodules,
+      # so the failure would arrive much later, as a missing Hermod.
+      #
+      # The rest is what .NET needs on a bare Debian - ICU and tzdata for
+      # globalization, OpenSSL for crypto, ca-certificates for NuGet over
+      # HTTPS - and what the start below asks the server with: curl for the
+      # JSON API, and the openssl command for a TLS handshake with NTS-KE.
+      - name: Install prerequisites (Debian container)
+        if: runner.os == 'Linux'
+        run: apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git libicu76 libssl3t64 libstdc++6 openssl tzdata && git config --global --add safe.directory '*'
+
+      # The libraries are submodules, pinned, and testing them as pinned is the
+      # point: this repository's own question is whether this particular
+      # combination of libraries works together.
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # The whole solution rather than only NTSServerCLI: "they still compile
+      # together at these gitlinks" is the one statement this repository is
+      # uniquely able to make.
+      - name: Build
+        run: dotnet build NTSServerCLI.slnx --configuration Release
+
+      # The node below the NTS server: its log, its configuration file, DNS and
+      # NTS, the certificate store, who may do what, its accounts and its
+      # ports - and the node itself, started where a test needs it listening:
+      # on a free port, and without a question to any name or time server
+      # leaving this machine. libs/WWCP_Node has a workflow of its own, which
+      # builds it against the tips of the libraries below it; this step asks
+      # the other question - whether it holds at the gitlinks pinned here.
+      - name: Test the node
+        timeout-minutes: 10
+        run: dotnet test libs/WWCP_Node/WWCP_Node_Tests/WWCP_Node_Tests.csproj --configuration Release --no-build --logger "console;verbosity=normal" --logger "trx;LogFileName=node-${{ matrix.leg }}.trx" --results-directory artifacts
+
+      # The NTS server's own tests: the "ntsServer" section, the clock handed
+      # out and how it is slewed, NTS-KE over TLS and over SSH followed by
+      # NTP+NTS - asked by Norn's own client - cookies that outlive a restart,
+      # an NTS server following another one upstream, and WWCP_Node's
+      # conformance suite asked of an NTS server. Nowhere else runs them -
+      # libs/NTSServer has no workflow of its own, by design: it is not built
+      # alone, it is built here.
+      #
+      # No category filter: nothing in them leaves the machine. Every server
+      # asked is one the test started, on the loopback address and on ports
+      # nobody else has.
+      - name: Test the NTS server
+        timeout-minutes: 30
+        run: dotnet test libs/NTSServer/NTSServerTests/NTSServerTests.csproj --configuration Release --no-build --logger "console;verbosity=normal" --logger "trx;LogFileName=${{ matrix.leg }}.trx" --results-directory artifacts
+
+      # The question no unit test in this repository asks: does it start, and
+      # does it answer in the protocols it is there for? Everything that only
+      # happens at startup happens here - the assemblies resolve, the ports are
+      # bound, a self-signed TLS identity is made, Norn's server comes up.
+      #
+      # Linux only: starting a process in the background, waiting for it and
+      # stopping it again is one shell to get right rather than two. The
+      # Windows leg answers the smaller question below.
+      #
+      # Everything it writes goes to a temporary directory: a first start makes
+      # an account store, a certificate store, a TLS identity, master keys and
+      # a log file, and none of that belongs in a workspace whose cleanliness
+      # the build stamps into every assembly it produces.
+      #
+      # Every port is given, none below 1024 - NTP's 123 would need
+      # CAP_NET_BIND_SERVICE - and none in the range Linux hands out to
+      # outgoing connections (32768-60999) or Windows' (49152 on), where a port
+      # is free only by chance.
+      #
+      # Four questions are asked of it:
+      #  * the JSON API must answer 401: it is nobody's business until somebody
+      #    has signed in, and a 200 would mean the door had come off;
+      #  * the SSH server - the command line, and NTS-KE over SSH - must say
+      #    its version;
+      #  * NTS-KE must make a TLS 1.3 handshake and agree to the ALPN "ntske/1"
+      #    of RFC 8915 § 4 - the openssl command does not verify the
+      #    self-signed identity, which is not the question here;
+      #  * NTP must answer a plain client request (mode 3) as a server (mode 4,
+      #    version 4, leap indicator 0) at stratum 1: in local mode the clock
+      #    handed out is this machine's.
+      - name: The NTS server starts and answers (Debian)
+        if: matrix.leg == 'debian-13-container'
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -u
+          tmp="$(mktemp -d)"
+          dotnet NTSServerCLI/bin/Release/net10.0/NTSServerCLI.dll \
+              --port        18361 \
+              --ssh-port    22124 \
+              --ntske-port  14460 \
+              --ntp-port    11123 \
+              --hostname    localhost \
+              --accounts    "$tmp/accounts" \
+              --config      "$tmp/configuration.json" \
+              --log-file    "$tmp/logs" \
+              < /dev/null > "$tmp/console.log" 2>&1 &
+          pid=$!
+
+          # curl -w writes "000" itself when it could not connect, so nothing
+          # may add a value of its own behind it; and this shell runs with -e,
+          # so "|| true" keeps curl's exit code from ending the step. The
+          # ${:-000} after it is for the case where there is no curl at all.
+          api=000
+          for _ in $(seq 1 60); do
+              api="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18361/api/v1/ntsServer 2>/dev/null || true)"
+              api="${api:-000}"
+              if [ "$api" != 000 ]; then
+                  break
+              fi
+              # Gone rather than slow: stop waiting for it.
+              kill -0 "$pid" 2>/dev/null || break
+              sleep 1
+          done
+
+          # The first line the SSH server says, read while it still runs: its
+          # version, "SSH-2.0-...". Nothing within five seconds leaves it empty.
+          ssh_banner="$(timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/22124 && head -n 1 <&3' 2>/dev/null | tr -d '\r' || true)"
+
+          # A TLS handshake with NTS-KE, and what was agreed: "New, TLSv1.3,
+          # Cipher is ..." and "ALPN protocol: ntske/1". stdin is empty, so the
+          # client closes after the handshake without a key exchange.
+          ntske="$(timeout 10 openssl s_client -connect 127.0.0.1:14460 -servername localhost -tls1_3 -alpn ntske/1 < /dev/null 2>&1 || true)"
+          ntske_version="$(printf '%s\n' "$ntske" | sed -n 's/^New, \(TLSv[0-9.]*\), .*/\1/p' | head -n 1)"
+          ntske_alpn="$(printf '%s\n' "$ntske" | sed -n 's/^ALPN protocol: //p' | head -n 1)"
+
+          # An NTP request of 48 bytes, the first 0x23: leap indicator 0,
+          # version 4, mode 3 (client). Written by cat in one write, so that it
+          # leaves as one datagram; the answer's first two bytes are kept, in
+          # hex: its first byte and its stratum.
+          printf '\043' > "$tmp/ntp-request"
+          head -c 47 /dev/zero >> "$tmp/ntp-request"
+          ntp="$(timeout 5 bash -c 'exec 3<>/dev/udp/127.0.0.1/11123 && cat "$1" >&3 && head -c 48 <&3' _ "$tmp/ntp-request" 2>/dev/null | od -An -tx1 -N2 | tr -d ' \n' || true)"
+
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+
+          echo "GET /api/v1/ntsServer -> $api"
+          echo "SSH 22124             -> ${ssh_banner:-nothing}"
+          echo "NTS-KE 14460          -> ${ntske_version:-no TLS}, ALPN ${ntske_alpn:-none}"
+          echo "NTP 11123             -> ${ntp:-nothing}"
+
+          # What the banner says this was built from - in every run, not only a
+          # red one, because a stamp that reads "unknown" or "-dirty" is worth
+          # seeing while everything else is green.
+          awk '/^  built from/ { f = 1 } f && !/^  built from/ && !/^                 / { f = 0 } f' "$tmp/console.log" || true
+
+          fault=0
+          if [ "$api" != 401 ]; then
+              echo "The JSON API answered $api where 401 was expected: it is supposed to be shut to anyone not signed in."
+              fault=1
+          fi
+          case "$ssh_banner" in
+              SSH-2.0-*) ;;
+              *) echo "The SSH server did not answer on 22124."
+                 fault=1 ;;
+          esac
+          if [ "$ntske_version" != TLSv1.3 ] || [ "$ntske_alpn" != ntske/1 ]; then
+              echo "NTS-KE on 14460 did not agree to TLS 1.3 with the ALPN ntske/1. What openssl said:"
+              printf '%s\n' "$ntske" | grep -v -e '^[A-Za-z0-9+/=]\{64\}$' | head -40
+              fault=1
+          fi
+          if [ "$ntp" != 2401 ]; then
+              echo "NTP on 11123 did not answer as a synchronized stratum-1 server (expected 2401, the first byte and the stratum)."
+              fault=1
+          fi
+
+          if [ "$fault" != 0 ]; then
+              echo
+              if kill -0 "$pid" 2>/dev/null; then
+                  echo "It was still running when it was asked."
+              else
+                  echo "It was no longer running when it was asked."
+              fi
+              echo "What it said, without the first-start password:"
+              grep -v -i password "$tmp/console.log" || echo "(nothing at all)"
+              exit 1
+          fi
+
+      # The same question in the form the other leg can answer without process
+      # control: the entry assembly loads, its arguments parse, it exits 0.
+      - name: The NTS server runs (Windows)
+        if: runner.os == 'Windows'
+        run: dotnet NTSServerCLI/bin/Release/net10.0/NTSServerCLI.dll --help
+
+      # The console log answers "did it pass" and almost nothing else. TRX keeps,
+      # per test: outcome, duration, error message, stack trace, and the reason
+      # an Assert.Ignore gave — which never reaches the console at all.
+      #
+      # !cancelled() rather than success(): a red run is when these files matter
+      # most, so uploading only on green would throw the evidence away in
+      # exactly the case it is wanted.
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.leg }}
+          path: artifacts/*.trx
