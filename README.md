@@ -185,7 +185,10 @@ correction on top of it:
 
 * every poll interval the group is asked, band by band, and the median of the
   authenticated answers is taken once the quorum has answered: a single server
-  that lies cannot move the clock;
+  that lies cannot move the clock. A server that says it is not synchronized
+  itself - leap indicator 3, stratum 16 - gives no answer at all here: Norn's
+  NTS client turns it away, so it counts neither toward the quorum nor in the
+  median, and a band of only such servers is passed over for the next;
 * the first time is **stepped** to, before anything is handed out - nothing is
   answered at all, NTS-KE included, before the group has given a time;
 * from then on every difference is **slewed** away by the next round, never
@@ -206,8 +209,8 @@ delay and dispersion to what the way there and the measuring add.
 
 * a round announces one when more than half of its authenticated answers say
   so with their leap indicator (1 inserted, 2 deleted) - a single server
-  cannot have one made, and a server that is not synchronized itself (3)
-  counts against it;
+  cannot have one made, and a server that does not announce it counts against
+  it;
 * it is taken up only on the last day of a month, at whose end it is made: a
   client that hands the leap indicator to its kernel (adjtimex's `STA_INS`)
   has the second made at the end of the day it was told, whatever day that is;
@@ -411,7 +414,8 @@ The settings, the clock and how it is slewed, leap seconds - when one counts,
 and the instant it is made - NTS-KE over TLS and over SSH followed by
 NTP+NTS - asked by Norn's own client - cookies that outlive a restart, a
 second server following the first upstream, and passing on and making a
-leap second the first announces at the end of a month, the settings changed
+leap second the first announces at the end of a month - and not following it
+where it says it is not synchronized itself - the settings changed
 while running - other ports answered on at once, a port somebody else has
 changing nothing, a switch of the start never written back, local mode to
 upstream and back, and who may change them - and WWCP_Node's
@@ -435,14 +439,6 @@ every test of every library at the commits pinned here - but for those that
 ask real name and time servers on the Internet - and builds and tests once
 more with every library at its newest commit, to say what advancing them
 would cost.
-
-
-### What is not here yet
-
-* An upstream server that says it is not synchronized itself - leap indicator
-  3 - still takes part in the median: Norn's verdict on a round leaves out
-  what did not authenticate, but not that. It only counts against a leap
-  second here.
 
 
 ## Your participation
