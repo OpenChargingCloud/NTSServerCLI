@@ -79,7 +79,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       # The web interface is built by npm and webpack from inside the .NET build
       # — NTSServer.csproj runs "npm ci" and "npm run build" and then embeds
@@ -182,7 +182,7 @@ jobs:
         run: |
           set -u
           tmp="$(mktemp -d)"
-          dotnet NTSServerCLI/bin/Release/net10.0/NTSServerCLI.dll \
+          dotnet NTSServerCLI/bin/Release/net11.0/NTSServerCLI.dll \
               --port        18361 \
               --ssh-port    22124 \
               --ntske-port  14460 \
@@ -289,7 +289,7 @@ jobs:
       # control: the entry assembly loads, its arguments parse, it exits 0.
       - name: The NTS server runs (Windows)
         if: runner.os == 'Windows'
-        run: dotnet NTSServerCLI/bin/Release/net10.0/NTSServerCLI.dll --help
+        run: dotnet NTSServerCLI/bin/Release/net11.0/NTSServerCLI.dll --help
 
       # The console log answers "did it pass" and almost nothing else. TRX keeps,
       # per test: outcome, duration, error message, stack trace, and the reason

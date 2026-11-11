@@ -317,10 +317,6 @@ namespace cloud.charging.open.NTSServer
             await using (node)
             {
 
-                // What somebody signed in over SSH gets: this program's own
-                // command line, with its commands beside the node's.
-                node.CommandLines = (terminal, caller) => new NTSServerCLI(node, terminal, caller);
-
                 if (node.ImportCertificates(arguments, out _) is Int32 notImported)
                     return notImported;
 

@@ -67,7 +67,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - uses: actions/setup-node@v7
         with:
@@ -130,7 +130,7 @@ jobs:
         run: |
           set -u
           tmp="$(mktemp -d)"
-          dotnet NTSServerCLI/bin/Release/net10.0/NTSServerCLI.dll \
+          dotnet NTSServerCLI/bin/Release/net11.0/NTSServerCLI.dll \
               --port        18361 \
               --ssh-port    22124 \
               --ntske-port  14460 \
@@ -294,7 +294,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
 
       - uses: actions/setup-node@v7
         with:

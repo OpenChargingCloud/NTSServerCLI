@@ -46,7 +46,7 @@ git submodule update --init --recursive
 
 ### Building and running it
 
-.NET 10 and Node 22 or newer. The build runs `npm ci` and `npm run build` for
+.NET 11 and Node 22 or newer. The build runs `npm ci` and `npm run build` for
 the web interface itself whenever its inputs changed, and embeds it into the
 assembly; `-p:SkipFrontendBuild=true` builds the rest alone.
 
@@ -334,7 +334,10 @@ gets it - the command line and NTS-KE share the SSH server, not the logins
 is logged with whoever made it.
 
 The prompt is the console's, and every account's over SSH:
-`ssh -p 22361 root@127.0.0.1`.
+`ssh -p 22361 root@127.0.0.1`. The commands are the NTS server's and not this
+program's: they live in `libs/NTSServer/NTSServer/CommandLine/`, the node hands
+them to whoever signs in over SSH by itself, and `libs/NTSServer` tests them -
+so that an NTS server run by another program can be told the same.
 
 
 ### The web interface
@@ -390,8 +393,7 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | | |
 |---|---|
 | `NTSServerCLI/` | the command line: the time server's own switches, and its lines of what the console says at a start |
-| `NTSServerCLI/CLI/` | what can be typed at the running server - `timeServer`, `ntsClients` and `masterKeys` |
-| `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API - and its tests |
+| `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API, what can be typed at it (`timeServer`, `ntsClients` and `masterKeys`) - and its tests |
 | `libs/NTSServer/NTSServer/Frontend/` | the web interface: TypeScript and SCSS, bundled by webpack |
 | `libs/WWCP_Node/` | what every one of these programs shares: the configuration file, the log, name resolution and the time, the certificate store, who may sign in, the command line over SSH, and the switches, the usage and the banner every node has |
 | `libs/Norn/` | NTS and NTP: the key exchange over TLS and over SSH, the cookies, the AEAD, the server and the client |
@@ -400,8 +402,8 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | `.github/workflows/` | what runs on every push, and what runs at night |
 
 The command line is this program's vocabulary and nothing else - the switches
-it is started with and the commands it can be typed at. What a time server
-*is*, and what it does, lives in `libs/NTSServer`.
+it is started with. What a time server *is*, what it does, and what it can be
+told at its prompt, lives in `libs/NTSServer`.
 
 
 ### Its tests
@@ -418,7 +420,9 @@ leap second the first announces at the end of a month - and not following it
 where it says it is not synchronized itself - the settings changed
 while running - other ports answered on at once, a port somebody else has
 changing nothing, a switch of the start never written back, local mode to
-upstream and back, and who may change them - and WWCP_Node's
+upstream and back, and who may change them - the commands of the prompt,
+typed at the console and over SSH, where an operator may look but not change
+- and WWCP_Node's
 conformance suite asked of an NTS server, its web interface among it. Nothing
 in them leaves the machine. The web interface's own tests - its pages drawn
 against a stand-in server, and the rules every page of every kind of node is
