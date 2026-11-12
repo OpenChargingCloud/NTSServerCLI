@@ -278,6 +278,34 @@ at once, in the file as well, and every client makes a new key exchange.
 `masterKeys` shows the keys kept - their ids and validity, never their values.
 
 
+### Signed responses
+
+A client may ask for a response signed as well as authenticated - signed with
+a key whose public half its key exchange hands it, so that it can show a third
+party what time this server gave it. The keys are kept in
+`ntsServer/signingKeys.json`, the owner's alone like the master keys: whoever
+reads them can sign a time in this server's name. The first start makes one
+(ECDSA over P-256, SHA-256), valid at once and without end; a response that
+asks for no key in particular is signed with the valid key that began last,
+one that asks for a key by its id with that key.
+
+```
+signingKeys                 every key: its id, from when to when, what it is now, its public key
+signingKeys new             a new key, signing a day from now on - its public key handed out until then
+signingKeys new now         a new key, signing at once: for a key that may have been read
+signingKeys retire 1        the key signs nothing from now on, and its public key is no longer handed out
+```
+
+A new key begins a day later, so that the clients have learnt its public key
+from a key exchange before it signs; the key before it goes on signing until
+then, and afterwards where a client asks for it by its id, until it is retired.
+A key is never deleted, only retired, so that what a client was told keeps its
+meaning. The keys are handed to every server made, the one made anew in
+upstream mode among them, and outlive a restart. A key file that cannot be
+read is left as it is, with an error in the log, and nothing is signed until
+it is mended.
+
+
 ### NTS-KE over SSH
 
 The subsystem `ntske/1@open.charging.cloud` of the node's SSH server - the
@@ -325,12 +353,15 @@ ask and show the upstream servers - the NTS server has:
 
 * `timeServer` - what it listens on, the SSH host key a client holds it to,
   where its time comes from, how far that was from the upstream servers, the
-  master key the cookies are sealed with, and how much it answered;
+  master key the cookies are sealed with, the key the responses are signed
+  with, and how much it answered - how many responses signed among it;
 * `timeServer sync` - ask the upstream servers now;
 * `ntsClients ...` - the machines that may make key exchanges over SSH, and
   when each was last served;
 * `masterKeys [rotate [forget]]` - the master keys of the cookies, and a new
-  one from now on.
+  one from now on;
+* `signingKeys [new [now] | retire <id>]` - the keys the responses are signed
+  with, a new one, and one retired.
 
 Who signs in for the prompt is an account of the node; an NTS client never
 gets it - the command line and NTS-KE share the SSH server, not the logins
@@ -348,7 +379,7 @@ so that an NTS server run by another program can be told the same.
 
 | | |
 |---|---|
-| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines, with how many key exchanges it served and turned away since the start; the master keys of the cookies - their ids, from when and until when each is kept, which one seals now, never their values - with **New master key** and **New key, and forget the others**; and how much it answered |
+| **Time server** (`/ntsServer`) | whether it answers and since when; what it hands out - this machine's clock, or the time of an NTS group on a clock of its own, with its correction and frequency - and what the answers say of it: stratum, reference, root delay and dispersion, leap indicator; in upstream mode the last round - synchronized since, the server closest to the median, how many answered, offset, the error being slewed, jitter and spread, rounds, outliers and steps, and a leap second announced and what is made of it - and **Ask them now**; the certificate NTS-KE over TLS shows, with its SHA-256 fingerprint and its PEM to copy or download for a client to trust; where NTP answers and what the key exchange names; NTS-KE over SSH in a few lines, with how many key exchanges it served and turned away since the start; the master keys of the cookies - their ids, from when and until when each is kept, which one seals now, never their values - with **New master key** and **New key, and forget the others**; the keys the responses are signed with - their ids, their public keys, from when and until when, which one signs now and which is next - with **New signing key**, **New key, signing at once** and **Retire**; and how much it answered |
 | **Settings** (`/ntsServer/settings`) | where the time comes from - this machine's clock and what the answers say of it, or an NTS group and how it is followed - what is listened on, and the names it goes by; saved whole, changed where it differs, and in effect at once, with what has to be known of it said below: a port the clients are to be told, a certificate made anew, a switch of the start that says otherwise |
 | **NTS clients** (`/ntsServer/clients`) | NTS-KE over SSH - whether it is served, where, its subsystem and the host key a client holds the server to - switched on and off; the machines that may make key exchanges over SSH, each key with its fingerprint, its comment and its options, the key of an SSH CA marked as one, with the names its certificates have to be made out to; beside each client when it was last served - from where, with option A or B of the white paper, the AEAD algorithm, how many cookies - and when it was last turned away and why, since the start; the accounts of the node that made key exchanges under their own names, so too; a client added with its first key, another key of one added, a key removed, a client switched off and on, and removed |
 | **Configuration** | what the NTS server is running and its `ntsServer` section as it is in effect, and below it the **DNS client**, the **Upstream time servers** (the node's NTS groups), the **SSH server**, the **Trusted certificates**, **Identities** and **Server identities** of the node itself - the TLS identity NTS-KE shows among them |
@@ -359,9 +390,11 @@ written into the `ntsServer` section of the configuration file: a client
 switched off or removed makes no key exchange from then on, and a session of
 it that is open ends. Whoever may only read sees everything and changes
 nothing; **Ask them now** takes a role that may run `nts`, a change of the
-settings or of the NTS clients or a new master key one that may edit
-`timeserver`. A new master key that forgets the others is asked about first:
-every client makes a new key exchange after it. The key exchanges are counted
+settings or of the NTS clients or a new master or signing key one that may
+edit `timeserver`. A new master key that forgets the others is asked about
+first: every client makes a new key exchange after it. So are a signing key
+that signs at once - a client that has made no key exchange since cannot check
+it - and a signing key retired. The key exchanges are counted
 since the program started; what lasts is in the log.
 
 `--frontend libs/NTSServer/NTSServer/Frontend/dist` serves the web interface
@@ -374,19 +407,21 @@ Every node's below `/api/v1`, and the time server's:
 
 | | |
 |---|---|
-| `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it, the master keys kept and each NTS client's last key exchange |
+| `GET /api/v1/ntsServer` | how the time server stands, the certificate of NTS-KE in PEM among it, the master keys kept, the signing keys with their public keys and each NTS client's last key exchange |
 | `GET /api/v1/ntsServer/settings` | the `ntsServer` section as it is in effect |
 | `PUT /api/v1/ntsServer/settings` | the section or any part of it but `ssh` - a `null` is the default - in effect at once and saved where it changed; answered `{ "settings", "changed": [ "ntpPort", "upstream.group", ... ], "notes" }`, 400 for what is no setting, 409 for a port somebody else has, with nothing changed |
 | `POST /api/v1/ntsServer/sync` | ask the upstream servers now |
 | `GET /api/v1/ntsServer/ssh` | NTS-KE over SSH and the NTS clients, each key with its fingerprint, each client - and each account that made key exchanges - with its last key exchange |
 | `PUT /api/v1/ntsServer/ssh` | `{ "enabled", "clients": [ { "name", "keys": [ <authorized_keys line> ], "enabled" } ] }` - what it changes, and nothing else; answered as `GET` |
 | `POST /api/v1/ntsServer/masterKeys/rotate` | `{ "forget" }` - seal the cookies with a new master key from now on, and with `"forget": true` forget every earlier one at once; answered with the new key and the keys kept, never a value |
+| `POST /api/v1/ntsServer/signingKeys` | `{ "atOnce" }` - a new signing key, beginning a day from now, or at once; answered `{ "made", "signingKeys" }`, never a private key |
+| `POST /api/v1/ntsServer/signingKeys/retire` | `{ "id" }` - the key signs nothing from now on; answered `{ "retired", "signingKeys" }`, 404 for a key nobody has or one retired already |
 
 
 ### Who may do what
 
 Two resources beside the node's: `timeserver` - read, how the time server
-stands; edited, its settings, its NTS clients, NTS-KE over SSH and its master keys - and `ntske` - run, a key
+stands; edited, its settings, its NTS clients, NTS-KE over SSH, its master keys and its signing keys - and `ntske` - run, a key
 exchange over SSH by an account. Two roles beside the node's viewer and
 administrators: `operator`, who reads everything and asks the name and time
 servers, and `ntsclient`, who makes key exchanges and nothing else.
@@ -397,7 +432,7 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | | |
 |---|---|
 | `NTSServerCLI/` | the command line: the time server's own switches, and its lines of what the console says at a start |
-| `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API, what can be typed at it (`timeServer`, `ntsClients` and `masterKeys`) - and its tests |
+| `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API, what can be typed at it (`timeServer`, `ntsClients`, `masterKeys` and `signingKeys`) - and its tests |
 | `libs/NTSServer/NTSServer/Frontend/` | the web interface: TypeScript and SCSS, bundled by webpack |
 | `libs/WWCP_Node/` | what every one of these programs shares: the configuration file, the log, name resolution and the time, the certificate store, who may sign in, the command line over SSH, and the switches, the usage and the banner every node has |
 | `libs/Norn/` | NTS and NTP: the key exchange over TLS and over SSH, the cookies, the AEAD, the server and the client |
