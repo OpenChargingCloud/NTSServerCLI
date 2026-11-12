@@ -188,7 +188,11 @@ correction on top of it:
   that lies cannot move the clock. A server that says it is not synchronized
   itself - leap indicator 3, stratum 16 - gives no answer at all here: Norn's
   NTS client turns it away, so it counts neither toward the quorum nor in the
-  median, and a band of only such servers is passed over for the next;
+  median, and a band of only such servers is passed over for the next.
+  Answers further apart than the group's maximum deviation are a time only
+  where a majority of them - and as many as the quorum - agree within it; the
+  time is then the median of that majority, and otherwise the round has no
+  time and says that the servers disagree;
 * the first time is **stepped** to, before anything is handed out - nothing is
   answered at all, NTS-KE included, before the group has given a time;
 * from then on every difference is **slewed** away by the next round, never
@@ -201,8 +205,8 @@ correction on top of it:
   no longer handed out as synchronized: nothing is answered until the group
   gives a time again.
 
-The answers say stratum one below the upstream server closest to the median,
-name it by its address as the reference (RFC 5905 § 7.3), and add its root
+The answers say stratum one below the upstream server closest to the median -
+always one of those the median was taken from - name it by its address as the reference (RFC 5905 § 7.3), and add its root
 delay and dispersion to what the way there and the measuring add.
 
 **Leap seconds** the upstream servers announce are passed on and made:
