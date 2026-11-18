@@ -435,6 +435,7 @@ servers, and `ntsclient`, who makes key exchanges and nothing else.
 | `libs/NTSServer/` | the NTS server itself - its settings, the clock it hands out, Norn's server around it, NTS-KE over SSH, its JSON API, what can be typed at it (`timeServer`, `ntsClients`, `masterKeys` and `signingKeys`) - and its tests |
 | `libs/NTSServer/NTSServer/Frontend/` | the web interface: TypeScript and SCSS, bundled by webpack |
 | `libs/WWCP_Node/` | what every one of these programs shares: the configuration file, the log, name resolution and the time, the certificate store, who may sign in, the command line over SSH, and the switches, the usage and the banner every node has |
+| `libs/WWCP_Core/` | of WWCP Core only WWCP_CoreData: the networking node, its connections over WebSockets and SSH, and the signed messages WWCP_Node builds on |
 | `libs/Norn/` | NTS and NTP: the key exchange over TLS and over SSH, the cookies, the AEAD, the server and the client |
 | `libs/Hermod/` | the network below all of them: HTTP, TLS, SSH and DNS |
 | `libs/Styx/`, `libs/Urdr/` | the basics below that, and time stamps (RFC 3161), which WWCP_Node takes from Urdr |
