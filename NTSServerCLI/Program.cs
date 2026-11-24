@@ -196,7 +196,7 @@ namespace cloud.charging.open.NTSServer
             String?      upstreamGroup  = null;
             IPPort?      ntsKEPort      = null;
             IPPort?      ntpPort        = null;
-            IIPAddress?  listen         = null;
+            IPAddress?   listen         = null;
             String?      hostname       = null;
             var          noNTSKEOverSSH = false;
 
@@ -245,11 +245,12 @@ namespace cloud.charging.open.NTSServer
 
                     case "--listen":
                         if (!NodeArguments.TryTakeValue(rest, ref i, out var listenText) ||
-                            !TimeServerSettings.TryParseListen(listenText, out listen))
+                            !TimeServerSettings.TryParseListen(listenText, out var listenAddress))
                         {
                             NodeProgram.Say(Console.Error, "Missing or invalid address after --listen: an IPv4 or IPv6 address, or \"any\"!");
                             return 2;
                         }
+                        listen = listenAddress;
                         break;
 
                     case "--hostname":
