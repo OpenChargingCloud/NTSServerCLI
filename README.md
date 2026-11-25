@@ -142,9 +142,10 @@ Everything but `ssh` can also be changed while the server runs - on the
 * `timeSource` switched to `upstream` stops answering until the group has
   given a time; switched back to `local`, the time handed out is the
   machine's clock again at once, by as much of a jump as the two were apart;
-* `local` is answered at once in local mode, and `upstream` followed from the
-  next round in upstream mode - which is asked at once, not at the end of the
-  poll interval before.
+* `local` is answered at once in local mode, by the server that runs - a
+  description of the clock is handed to it, not a server made anew for it -
+  and `upstream` followed from the next round in upstream mode - which is
+  asked at once, not at the end of the poll interval before.
 
 Only what changed is written into the section, and a value taken away is
 taken out of it, so that it reads as the default. What a switch of this start
@@ -208,8 +209,13 @@ correction on top of it:
   gives a time again.
 
 The answers say stratum one below the upstream server closest to the median -
-always one of those the median was taken from - name it by its address as the reference (RFC 5905 § 7.3), and add its root
-delay and dispersion to what the way there and the measuring add.
+always one of those the median was taken from - name it by its address as the
+reference (RFC 5905 § 7.3), and add its root delay and dispersion to what the
+way there and the measuring add. They say it as every round measured it: the
+server that answers is told so, and goes on answering; the log says it only
+where a client would see the difference - another stratum or leap indicator at
+once, another server or a root delay or dispersion off by a factor of two at
+most every fifteen minutes.
 
 **Leap seconds** the upstream servers announce are passed on and made:
 
@@ -267,10 +273,10 @@ key below it.
 The master keys the cookies are sealed with are kept beside it, in
 `ntsServer/masterKeys.json`: a new one every day, and those of the last seven
 days as well, so that the cookies a client holds outlive a restart of the
-program and the server made anew when, in upstream mode, the description of
-the clock changes. Whoever reads them can open every cookie, and with it the
-keys its client authenticates time with - so the directory and the file are
-the owner's alone, and a key is gone from the file once it is forgotten.
+program and the server made anew for other settings or another certificate.
+Whoever reads them can open every cookie, and with it the keys its client
+authenticates time with - so the directory and the file are the owner's alone,
+and a key is gone from the file once it is forgotten.
 
 `masterKeys rotate` at the prompt seals the cookies with a new key from then
 on; the earlier keys still open their cookies until their seven days are over,
@@ -302,9 +308,9 @@ A new key begins a day later, so that the clients have learnt its public key
 from a key exchange before it signs; the key before it goes on signing until
 then, and afterwards where a client asks for it by its id, until it is retired.
 A key is never deleted, only retired, so that what a client was told keeps its
-meaning. The keys are handed to every server made, the one made anew in
-upstream mode among them, and outlive a restart. A key file that cannot be
-read is left as it is, with an error in the log, and nothing is signed until
+meaning. The keys are handed to every server made, one made anew for other
+settings among them, and outlive a restart. A key file that cannot be read is
+left as it is, with an error in the log, and nothing is signed until
 it is mended.
 
 
@@ -456,15 +462,18 @@ dotnet test libs/NTSServer/NTSServerTests/NTSServerTests.csproj
 
 The settings, the clock and how it is slewed, leap seconds - when one counts,
 and the instant it is made - NTS-KE over TLS and over SSH followed by
-NTP+NTS - asked by Norn's own client - cookies that outlive a restart, a
-second server following the first upstream, and passing on and making a
-leap second the first announces at the end of a month - and not following it
-where it says it is not synchronized itself - the settings changed
-while running - other ports answered on at once, a port somebody else has
-changing nothing, a switch of the start never written back, local mode to
-upstream and back, and who may change them - the commands of the prompt,
-typed at the console and over SSH, where an operator may look but not change
-- and WWCP_Node's
+NTP+NTS - asked by Norn's own client - cookies that outlive a restart and a
+server made anew, a server that answers described anew without being made
+anew, signed responses checked by a client across a restart, the signing keys
+made and retired at the prompt and over the JSON API, a second server
+following the first upstream - passing on and making a leap second the first
+announces at the end of a month, not following it where it says it is not
+synchronized itself, nor described by a server the others outvoted, and
+servers that disagree said to disagree - the settings changed while running -
+other ports answered on at once, a port somebody else has changing nothing, a
+switch of the start never written back, local mode to upstream and back, and
+who may change them - the commands of the prompt, typed at the console and
+over SSH, where an operator may look but not change - and WWCP_Node's
 conformance suite asked of an NTS server, its web interface among it. Nothing
 in them leaves the machine. The web interface's own tests - its pages drawn
 against a stand-in server, and the rules every page of every kind of node is
