@@ -1,5 +1,7 @@
 # NTSServerCLI
 
+![The EV charging test environment, the NTS server (NTS) highlighted](docs/EVChargingTestEnvironment.svg)
+
 [![CI](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/ci.yml)
 [![Nightly](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/nightly.yml/badge.svg)](https://github.com/OpenChargingCloud/NTSServerCLI/actions/workflows/nightly.yml)
 
