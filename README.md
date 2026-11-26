@@ -182,6 +182,24 @@ the roots the machine trusts or to a TLS root of the node's own store for
 `nts`, which is how an upstream server with a self-signed certificate is
 believed.
 
+An upstream server that is an NTS server of this kind - or anything else
+built on Norn - can be held to its signature as well:
+
+```json
+"upstream": { "servers": [ { "hostname": "time1.lan", "signedResponses": true } ],
+              "minServers": 1 }
+```
+
+It is then asked for a signed response after every measurement (see
+[Signed responses](#signed-responses)), and its answer counts only where that
+signature checks against a public key its key exchange named: a server that
+signs nothing, signs with a key that is not its own, or with one it did not
+name, counts neither toward the quorum nor in the median, and the log says
+why. Every signed response goes into the metrological log, the response
+itself among it - the evidence of what the time handed out rests on. The
+PTB's servers and every other NTS server sign nothing; asked to, they would
+never be followed.
+
 **This machine's clock is never set.** The time handed out runs on the
 machine's stopwatch - unaffected by whatever else sets the wall clock - and a
 correction on top of it:
@@ -273,7 +291,7 @@ key below it.
 The master keys the cookies are sealed with are kept beside it, in
 `ntsServer/masterKeys.json`: a new one every day, and those of the last seven
 days as well, so that the cookies a client holds outlive a restart of the
-program and the server made anew for other settings or another certificate.
+program and the server made anew for other ports, address or settings.
 Whoever reads them can open every cookie, and with it the keys its client
 authenticates time with - so the directory and the file are the owner's alone,
 and a key is gone from the file once it is forgotten.
@@ -463,12 +481,13 @@ dotnet test libs/NTSServer/NTSServerTests/NTSServerTests.csproj
 The settings, the clock and how it is slewed, leap seconds - when one counts,
 and the instant it is made - NTS-KE over TLS and over SSH followed by
 NTP+NTS - asked by Norn's own client - cookies that outlive a restart and a
-server made anew, a server that answers described anew without being made
-anew, signed responses checked by a client across a restart, the signing keys
-made and retired at the prompt and over the JSON API, a second server
-following the first upstream - passing on and making a leap second the first
-announces at the end of a month, not following it where it says it is not
-synchronized itself, nor described by a server the others outvoted, and
+server made anew, a server that answers described anew and showing another
+certificate without being made anew, signed responses checked by a client
+across a restart, the signing keys made and retired at the prompt and over the
+JSON API, a second server following the first upstream - passing on and making
+a leap second the first announces at the end of a month, not following it
+where it says it is not synchronized itself, nor where it was asked for signed
+responses and signs none, nor described by a server the others outvoted, and
 servers that disagree said to disagree - the settings changed while running -
 other ports answered on at once, a port somebody else has changing nothing, a
 switch of the start never written back, local mode to upstream and back, and
